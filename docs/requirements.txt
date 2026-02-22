@@ -1,0 +1,21 @@
+# Jobs Pro - Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core Dependencies
+selenium>=4.15.0          # Web browser automation
+webdriver-manager>=4.0.1  # Chrome driver auto-management
+customtkinter>=5.2.0      # Modern UI framework
+
+# Optional Web UI
+flask>=3.0.0              # Web-based interface (optional)
+
+# Build Tools
+pyinstaller>=6.0.0        # Build macOS app bundle
+
+# Note: All other dependencies are standard library modules:
+# - sqlite3 (database)
+# - tkinter (GUI base)
+# - threading (concurrency)
+# - json (data storage)
+# - datetime (time handling)
+# - subprocess (notifications)

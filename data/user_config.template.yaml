@@ -1,0 +1,42 @@
+# ApplyAI - User Configuration Template
+# Copy this file to user_config.yaml and fill in your credentials
+
+app_settings:
+  notifications_enabled: true
+  daily_summary: true
+  follow_up_reminders: true
+  random_delays: true
+  duplicate_check: true
+  headless_mode: false
+  theme: "Dark"
+
+search_defaults:
+  posted_date: "Last 3 days"
+  easy_apply_only: true
+  employment_types:
+    contract: true
+    fulltime: false
+    c2c: true
+  work_settings:
+    remote: true
+    hybrid: true
+    onsite: false
+  auto_apply_limit: 10
+
+# Dice Credentials - Fill in your Dice.com login
+dice_credentials:
+  email: "your-email@example.com"
+  password: "your-dice-password"
+  remember_me: true
+
+# Monster Credentials - Fill in your Monster.com login
+monster_credentials:
+  email: "your-email@example.com"
+  password: "your-monster-password"
+  remember_me: true
+
+last_session:
+  date: null
+  applications_sent: 0
+  keyword: null
+  job_board: "dice"
