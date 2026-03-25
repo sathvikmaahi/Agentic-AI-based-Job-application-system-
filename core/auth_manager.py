@@ -1,26 +1,42 @@
+import os
 import smtplib
 import random
 import string
 import time
 from email.mime.text import MIMEText
 
-# User Configuration
-AUTHORIZED_USERS = {
-    "Praneeth": "pc@innovcentric.com",
-    "Jonathan": "jt@innovcentric.com",
-    "Naveen": "hiring@innovcentric.com",
-    "Sathvik": "sankasathvik201@gmail.com",
-}
+
+def _load_authorized_users():
+    """Load OTP user map from data/authorized_users.yaml if present, else template."""
+    try:
+        import yaml
+
+        base = os.path.join(os.path.dirname(__file__), "..", "data")
+        for name in ("authorized_users.yaml", "authorized_users.template.yaml"):
+            path = os.path.join(base, name)
+            if os.path.isfile(path):
+                with open(path, encoding="utf-8") as f:
+                    data = yaml.safe_load(f) or {}
+                users = data.get("users")
+                if isinstance(users, dict) and users:
+                    return users
+    except Exception as e:
+        print(f"⚠️ Could not load authorized_users yaml: {e}")
+    return {}
+
+
+AUTHORIZED_USERS = _load_authorized_users()
 
 # OTP Storage (In-memory for session)
 # Format: { "email": { "code": "123456", "timestamp": 123456789 } }
 otp_storage = {}
 
+
 class AuthManager:
     def __init__(self):
-        self.sender_email = "jt@innovcentric.com"
-        # REAL APP PASSWORD PROVIDED BY USER
-        self.sender_password = "qdxs mmnf ouwu blpj" 
+        # Use environment variables — never commit app passwords to git
+        self.sender_email = os.environ.get("JOBSPRO_SMTP_EMAIL", "").strip()
+        self.sender_password = os.environ.get("JOBSPRO_SMTP_APP_PASSWORD", "").strip()
 
     def get_email_for_user(self, name):
         return AUTHORIZED_USERS.get(name)
@@ -32,53 +48,50 @@ class AuthManager:
             return False, "User not found."
 
         # Generate 6-digit code
-        code = ''.join(random.choices(string.digits, k=6))
-        
+        code = "".join(random.choices(string.digits, k=6))
+
         # Store
-        otp_storage[email] = {
-            "code": code,
-            "timestamp": time.time()
-        }
-        
+        otp_storage[email] = {"code": code, "timestamp": time.time()}
+
         return code, email
 
     def send_otp_email(self, user_name, smtp_password=None):
         """
         Generates OTP and attempts to email it.
         """
-        # Use stored password if not explicitly passed
-        password_to_use = smtp_password if smtp_password else self.sender_password
+        password_to_use = (smtp_password if smtp_password else self.sender_password) or ""
 
         code, email = self.generate_otp(user_name)
         if not code:
             return False, "Invalid User"
 
-        message_body = f"Hello {user_name},\n\nYour Login OTP for Jobs Pro is: {code}\n\nThis code expires in 5 minutes."
+        message_body = (
+            f"Hello {user_name},\n\nYour Login OTP for Jobs Pro is: {code}\n\n"
+            "This code expires in 5 minutes."
+        )
 
-        # --- SIMULATION MODE (Only if NO password available) ---
-        if not password_to_use:
-            print(f"========================================")
+        if not password_to_use or not self.sender_email:
+            print("========================================")
             print(f" [SIMULATION] Sending Email to: {email}")
             print(f" [CONTENT] {message_body}")
-            print(f"========================================")
-            # Return code in message for GUI simulation
+            print("========================================")
+            print(
+                "ℹ️ Set JOBSPRO_SMTP_EMAIL and JOBSPRO_SMTP_APP_PASSWORD for real SMTP "
+                "(Gmail app password)."
+            )
             return True, f"[SIMULATION] OTP Sent to {email}.\n\nYour CODE is: {code}"
 
-        # --- REAL SENDING MODE ---
         try:
             msg = MIMEText(message_body)
-            msg['Subject'] = "Jobs Pro Login Verification"
-            msg['From'] = self.sender_email
-            msg['To'] = email
+            msg["Subject"] = "Jobs Pro Login Verification"
+            msg["From"] = self.sender_email
+            msg["To"] = email
 
-            # Connect to G-Suite / Gmail SMTP
-            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as server:
+            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
                 server.login(self.sender_email, password_to_use)
                 server.sendmail(self.sender_email, email, msg.as_string())
-            
+
             return True, f"OTP sent successfully to {email}"
-
-
 
         except Exception as e:
             print(f"SMTP Error: {e}")
@@ -89,19 +102,16 @@ class AuthManager:
         email = self.get_email_for_user(user_name)
         if not email:
             return False
-            
+
         record = otp_storage.get(email)
         if not record:
-            return False # No OTP generated
-            
-        # Check Expiry (5 mins)
-        if time.time() - record['timestamp'] > 300:
+            return False  # No OTP generated
+
+        if time.time() - record["timestamp"] > 300:
             return False
-            
-        # Check Code
-        if record['code'] == input_code:
-            # Clear used OTP
+
+        if record["code"] == input_code:
             del otp_storage[email]
             return True
-            
+
         return False

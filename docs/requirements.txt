@@ -3,8 +3,11 @@
 
 # Core Dependencies
 selenium>=4.15.0          # Web browser automation
+certifi>=2024.2.2         # CA bundle for HTTPS (undetected-chromedriver / webdriver-manager on macOS)
 webdriver-manager>=4.0.1  # Chrome driver auto-management
+undetected-chromedriver>=3.5.5  # Monster / bot checks: patches Chrome (use for Monster login)
 customtkinter>=5.2.0      # Modern UI framework
+pyyaml>=6.0.1             # YAML config (user_config, user_profile)
 
 # Optional Web UI
 flask>=3.0.0              # Web-based interface (optional)

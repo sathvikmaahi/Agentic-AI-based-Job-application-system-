@@ -1,0 +1,8 @@
+# Default demo users (example emails). For production:
+#   Copy to authorized_users.yaml (gitignored) and set real addresses.
+
+users:
+  Sathvik: you@example.com
+  Praneeth: you@example.com
+  Jonathan: you@example.com
+  Naveen: you@example.com

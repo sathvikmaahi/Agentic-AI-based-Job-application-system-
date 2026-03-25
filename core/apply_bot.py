@@ -19,6 +19,47 @@ def interruptible_sleep(seconds, stop_event):
         waited += step
     return False
 
+def _collect_monster_easy_apply_links(driver):
+    """
+    Fallback: find Monster job detail links whose card/list row mentions Easy Apply.
+    Uses only valid CSS/XPath (no :contains in CSS).
+    """
+    job_links = []
+    seen = set()
+    # Common patterns for job detail URLs on Monster
+    xpath_candidates = (
+        "//a[contains(@href,'/job-openings/')]"
+        "|//a[contains(@href,'monster.com/jobs/')]"
+        "|//a[contains(@href,'/jobs/')]"
+    )
+    for link in driver.find_elements(By.XPATH, xpath_candidates):
+        try:
+            href = link.get_attribute("href") or ""
+            if not href or "monster.com" not in href:
+                continue
+            low = href.lower()
+            if "/jobs/search" in low or "/jobsearch" in low:
+                continue
+            if "/job-openings/" not in low and "/jobs/" not in low:
+                continue
+            # Walk up to find a container that still says Easy Apply
+            el = link
+            for _ in range(12):
+                try:
+                    txt = el.text or ""
+                    if "Easy Apply" in txt:
+                        if href not in seen:
+                            seen.add(href)
+                            job_links.append(href)
+                        break
+                    el = el.find_element(By.XPATH, "..")
+                except Exception:
+                    break
+        except Exception:
+            continue
+    return job_links
+
+
 def click_next_page(driver):
     """Helper to find and click the next page button."""
     print("\n🔎 Checking for Next Page...")
@@ -535,35 +576,50 @@ def start_applying_monster(driver, max_limit=30, start_page=1, stop_event=None, 
         # 1. Wait for results to load
         print("⏳ Waiting for job cards...")
         try:
-            # Monster uses different selectors for job cards
-            WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test-id='job-card'], .job-card, .card-content"))
+            # Monster DOM changes often — use several possible roots
+            WebDriverWait(driver, 20).until(
+                EC.presence_of_element_located((
+                    By.CSS_SELECTOR,
+                    "[data-test-id='job-card'], [data-testid='job-card'], .job-card, "
+                    "[data-cy='job-card'], article[data-job-id], .job-tile, .card-content"
+                ))
             )
-        except:
+        except Exception:
             print("⚠️ No jobs found or page took too long.")
             break # Stop if page doesn't load
 
         # 2. Collect Easy Apply Job URLs
         print("🔍 Scanning for 'Easy Apply' jobs on Monster...")
         
-        # Monster-specific script to find Easy Apply jobs
+        # NOTE: querySelector does NOT support :contains() (jQuery-only). Use innerText + valid selectors only.
         js_script = """
         var jobs = [];
-        // Look for job cards with Easy Apply button
-        var cards = document.querySelectorAll('[data-test-id="job-card"], .job-card, article');
-        
-        cards.forEach(card => {
-            // Check if card has Easy Apply button
-            var easyApplyBtn = card.querySelector('button[data-test-id="easy-apply-button"], button:contains("Easy Apply"), a:contains("Easy Apply")');
-            if (easyApplyBtn || card.innerText.includes('Easy Apply')) {
-                // Find the job link
-                var link = card.querySelector('a[href*="/jobs/"], a[href*="job-openings"], h2 a, .title a');
-                if (link && link.href) {
-                    jobs.push(link.href);
+        var cards = document.querySelectorAll(
+            '[data-test-id="job-card"], [data-testid="job-card"], [data-cy="job-card"], ' +
+            '.job-card, article[data-job-id], .job-tile, article'
+        );
+        cards.forEach(function(card) {
+            var text = (card.innerText || '');
+            if (text.indexOf('Easy Apply') === -1) { return; }
+            var link = card.querySelector(
+                'a[href*="/job-openings/"], a[href*="/jobs/"], ' +
+                'a[href*="job-openings"], h2 a, .title a, [data-test-id="job-title"] a'
+            );
+            if (link && link.href) {
+                jobs.push(link.href);
+                return;
+            }
+            var all = card.querySelectorAll('a[href*="monster.com"]');
+            for (var i = 0; i < all.length; i++) {
+                var h = (all[i].href || '').toLowerCase();
+                if (h.indexOf('/jobs/search') !== -1) { continue; }
+                if (h.indexOf('/job-openings/') !== -1 || h.indexOf('/jobs/') !== -1) {
+                    jobs.push(all[i].href);
+                    return;
                 }
             }
         });
-        return [...new Set(jobs)];
+        return Array.from(new Set(jobs));
         """
         
         try:
@@ -571,27 +627,16 @@ def start_applying_monster(driver, max_limit=30, start_page=1, stop_event=None, 
             if interruptible_sleep(3, stop_event): return
             job_links = driver.execute_script(js_script)
             
-            # If JS didn't find jobs, try alternative approach
+            # If JS didn't find jobs, try alternative approach (Python + DOM)
             if not job_links:
-                # Try finding all job links and check for Easy Apply
-                all_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='/jobs/']")
-                job_links = []
-                for link in all_links:
-                    try:
-                        href = link.get_attribute('href')
-                        if href and href not in job_links:
-                            # Check parent for Easy Apply text
-                            parent = link.find_element(By.XPATH, "..")
-                            for _ in range(5):  # Check up to 5 levels up
-                                if 'Easy Apply' in parent.text:
-                                    job_links.append(href)
-                                    break
-                                parent = parent.find_element(By.XPATH, "..")
-                    except:
-                        continue
+                job_links = _collect_monster_easy_apply_links(driver)
         except Exception as e:
             print(f"❌ Error scanning Monster jobs: {e}")
-            break
+            try:
+                job_links = _collect_monster_easy_apply_links(driver)
+            except Exception as e2:
+                print(f"❌ Fallback scan failed: {e2}")
+                job_links = []
 
         print(f"🎯 Found {len(job_links)} Easy Apply jobs on this page.")
         
@@ -639,9 +684,13 @@ def start_applying_monster(driver, max_limit=30, start_page=1, stop_event=None, 
                 found_search = False
                 for _ in range(5): # Try 'Back' up to 5 times
                     try:
-                        # Check if we see job cards
+                        # Check if we see job cards (same broad selectors as initial wait)
                         WebDriverWait(driver, 2).until(
-                            EC.presence_of_element_located((By.CSS_SELECTOR, "[data-test-id='job-card'], .job-card"))
+                            EC.presence_of_element_located((
+                                By.CSS_SELECTOR,
+                                "[data-test-id='job-card'], [data-testid='job-card'], .job-card, "
+                                "[data-cy='job-card'], article[data-job-id], .job-tile"
+                            ))
                         )
                         found_search = True
                         break # We are back!
@@ -693,23 +742,22 @@ def click_next_page_monster(driver):
 def apply_to_single_job_monster(driver, stop_event=None, user_data=None):
     """
     Handles the Apply flow for a single Monster job.
+    Order matches Dice: start Easy Apply / Continue, then Next, then Submit — avoid
+    matching 'Easy Apply' as a generic 'Apply' in the submit step.
     """
-    # --- ROBUST LOOP STRATEGY ---
-    max_duration = 60
+    max_duration = 90
     start_time = time.time()
     
-    # Track state
-    clicked_submit = False
     circle_back_check = False
     
-    print("   🔄 Entering Monster Smart Apply Loop (Max 60s)...")
+    print("   🔄 Entering Monster Smart Apply Loop (Max 90s)...")
     
     while (time.time() - start_time) < max_duration:
         # Check Stop
         if stop_event and stop_event.is_set(): return False
         
         # 0. Check Success OR Already Applied (Fast Fail)
-        if "Application Sent" in driver.page_source or "success" in driver.current_url:
+        if "Application Sent" in driver.page_source or "success" in driver.current_url.lower():
             print("   🎉 Application Sent Detected!")
             return True
             
@@ -723,64 +771,91 @@ def apply_to_single_job_monster(driver, stop_event=None, user_data=None):
         answer_yes_questions(driver)
         fill_smart_form(driver, user_data)
         
-        # 2. Find Action Buttons - Monster specific
+        # 2. Find Action Buttons — Easy Apply first, then Next/Continue, then Submit
         try:
-            # --- CHECK FOR SUBMIT ---
-            submit_btns = driver.find_elements(
-                By.XPATH, 
-                "//button[contains(., 'Submit')] | //button[contains(., 'Apply')] | //input[@type='submit'] | //button[@data-test-id='submit-button']"
+            # --- EASY APPLY (must run before generic "Apply" matching) ---
+            easy_apply_btns = driver.find_elements(
+                By.XPATH,
+                "//button[contains(normalize-space(.), 'Easy Apply')] | "
+                "//a[contains(normalize-space(.), 'Easy Apply')] | "
+                "//button[@data-test-id='easy-apply-button'] | "
+                "//*[@data-testid='easy-apply-button']"
             )
-            visible_submit = [b for b in submit_btns if b.is_displayed()]
-            
-            if visible_submit:
-                print("   ✅ Found SUBMIT/APPLY button. Clicking...")
-                driver.execute_script("arguments[0].click();", visible_submit[0])
+            visible_easy = []
+            for b in easy_apply_btns:
+                if not b.is_displayed():
+                    continue
+                txt = (b.text or b.get_attribute("innerText") or "").strip()
+                if "Applied" in txt or b.get_attribute("disabled"):
+                    continue
+                visible_easy.append(b)
+            if visible_easy:
+                print("   🖱️ Found EASY APPLY button. Clicking...")
+                driver.execute_script("arguments[0].click();", visible_easy[0])
                 circle_back_check = True
-                # Wait for success
-                if interruptible_sleep(5, stop_event): return False
-                continue # Loop back to check success
-                
-            # --- CHECK FOR NEXT/CONTINUE ---
+                if interruptible_sleep(3, stop_event): return False
+                continue
+
+            # --- NEXT / CONTINUE ---
             next_btns = driver.find_elements(
-                By.XPATH, 
-                "//button[contains(., 'Next')] | //button[contains(., 'Continue')] | //a[contains(., 'Continue')]"
+                By.XPATH,
+                "//button[contains(., 'Next')] | //button[contains(., 'Continue')] | "
+                "//a[contains(., 'Continue')]"
             )
             visible_next = [b for b in next_btns if b.is_displayed()]
-            
             if visible_next:
                 print("   ➡️ Found NEXT/CONTINUE button. Clicking...")
                 driver.execute_script("arguments[0].click();", visible_next[0])
+                circle_back_check = True
                 if interruptible_sleep(3, stop_event): return False
                 continue
-                
-            # --- CHECK FOR EASY APPLY BUTTON ---
-            easy_apply_btns = driver.find_elements(
+
+            # --- SUBMIT (exclude Easy Apply) ---
+            submit_btns = driver.find_elements(
                 By.XPATH,
-                "//button[contains(., 'Easy Apply')] | //a[contains(., 'Easy Apply')] | //button[@data-test-id='easy-apply-button']"
+                "//button[contains(., 'Submit')] | //input[@type='submit'] | "
+                "//button[@data-test-id='submit-button'] | //button[@type='submit']"
             )
-            
-            visible_apply = [b for b in easy_apply_btns if b.is_displayed()]
-            
-            # Filter out "Applied" (disabled)
+            visible_submit = []
+            for b in submit_btns:
+                if not b.is_displayed():
+                    continue
+                txt = (b.text or b.get_attribute("innerText") or "").strip()
+                if "Easy Apply" in txt:
+                    continue
+                visible_submit.append(b)
+            if visible_submit:
+                print("   ✅ Found SUBMIT button. Clicking...")
+                driver.execute_script("arguments[0].click();", visible_submit[0])
+                circle_back_check = True
+                if interruptible_sleep(5, stop_event): return False
+                continue
+
+            # --- GENERIC APPLY (not Easy Apply) ---
+            apply_btns = driver.find_elements(
+                By.XPATH,
+                "//button[contains(., 'Apply')] | //a[contains(., 'Apply')]"
+            )
             valid_apply = []
-            for btn in visible_apply:
-                txt = btn.text or btn.get_attribute('innerText')
-                if "Applied" in txt: continue
-                if btn.get_attribute("disabled"): continue
+            for btn in apply_btns:
+                if not btn.is_displayed():
+                    continue
+                txt = (btn.text or btn.get_attribute("innerText") or "").strip()
+                if "Easy Apply" in txt or "Applied" in txt:
+                    continue
+                if btn.get_attribute("disabled"):
+                    continue
                 valid_apply.append(btn)
-                
             if valid_apply:
-                 print("   🖱️ Found EASY APPLY button. Clicking...")
-                 driver.execute_script("arguments[0].click();", valid_apply[0])
-                 if interruptible_sleep(3, stop_event): return False
-                 continue
-                 
-        except Exception as e:
-            # Stale element or other minor error, just loop
+                print("   🖱️ Found APPLY button. Clicking...")
+                driver.execute_script("arguments[0].click();", valid_apply[0])
+                circle_back_check = True
+                if interruptible_sleep(3, stop_event): return False
+                continue
+
+        except Exception:
             pass
             
-        # If we are here, we didn't find any buttons this iteration.
-        # Wait a bit and try again (Loading...)
         print("   ⏳ Waiting for buttons...")
         if interruptible_sleep(2, stop_event): return False
         
@@ -790,19 +865,26 @@ def apply_to_single_job_monster(driver, stop_event=None, user_data=None):
 
 def check_if_applied_monster(driver):
     """
-    Returns True if detecting ANY 'Applied' indicator on Monster.
+    Returns True if detecting an 'Applied' status in primary UI controls (not job body text).
     """
     try:
-        # Look for buttons/text that say "Applied" or "Application Submitted"
-        btns = driver.find_elements(By.XPATH, "//button | //a[@role='button'] | //span | //div")
-        for btn in btns:
-            if not btn.is_displayed(): continue
-            txt = (btn.text or btn.get_attribute("innerText") or "").strip().lower()
-            if "applied" in txt or "application submitted" in txt or "already applied" in txt:
-                print(f"   🚫 Detected 'Applied' status: '{txt}'")
-                return True
-                
-    except: pass
+        for xpath in (
+            "//button[normalize-space(translate(., 'APPLIED', 'applied'))='applied']",
+            "//a[contains(., 'Already applied') or contains(., 'already applied')]",
+            "//*[contains(@class,'applied')][self::button or self::a]",
+        ):
+            for el in driver.find_elements(By.XPATH, xpath):
+                try:
+                    if not el.is_displayed():
+                        continue
+                    txt = (el.text or el.get_attribute("innerText") or "").strip().lower()
+                    if txt in ("applied", "already applied") or "application submitted" in txt:
+                        print(f"   🚫 Detected 'Applied' status: '{txt}'")
+                        return True
+                except Exception:
+                    continue
+    except Exception:
+        pass
     return False
 
 

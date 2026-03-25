@@ -6,6 +6,7 @@ data/user_config.yaml
 data/user_profile.yaml
 data/resumes_config.yaml
 data/schedule_config.yaml
+data/authorized_users.yaml
 
 # Keep template files
 !data/*.template.yaml
@@ -35,6 +36,7 @@ wheels/
 # Virtual Environment
 .venv/
 venv/
+jobspro_env/
 ENV/
 env/
 

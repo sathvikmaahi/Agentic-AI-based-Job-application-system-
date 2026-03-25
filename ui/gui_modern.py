@@ -141,10 +141,13 @@ class ApplyAI(ctk.CTk):
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", padx=25, pady=(20, 8))
         
-        self.user_var = ctk.StringVar(value="Sathvik")
+        _names = list(auth_manager.AUTHORIZED_USERS.keys())
+        if not _names:
+            _names = ["UserOne"]
+        self.user_var = ctk.StringVar(value=_names[0])
         self.combo_user = ctk.CTkComboBox(
             card, 
-            values=["Sathvik", "Praneeth", "Jonathan", "Naveen"],
+            values=_names,
             variable=self.user_var,
             width=300,
             height=40,
@@ -648,9 +651,14 @@ class ApplyAI(ctk.CTk):
             print(f"🔐 Logging into {self.selected_job_board}...")
             driver = login.perform_job_board_login(job_board, data['email'], data['password'])
             
-            # Navigate
+            # Navigate — Monster flags direct jumps to heavy search URLs; ease in + detect block page
             print("🌐 Opening search results...\n")
-            driver.get(target_url)
+            if job_board == "monster":
+                if not login.monster_open_search_results(driver, target_url):
+                    print("⛔ Stopping: fix the block or try again later before auto-apply.")
+                    return
+            else:
+                driver.get(target_url)
             
             # Auto Apply
             if data['auto_apply']:

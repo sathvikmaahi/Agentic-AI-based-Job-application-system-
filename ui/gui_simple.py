@@ -78,10 +78,13 @@ class JobsProSimple(ctk.CTk):
         
         # User Selection
         ctk.CTkLabel(self.frame_auth, text="Select User").pack(anchor="w", padx=20)
-        self.user_var = ctk.StringVar(value="Sathvik")
+        _names = list(auth_manager.AUTHORIZED_USERS.keys())
+        if not _names:
+            _names = ["UserOne"]
+        self.user_var = ctk.StringVar(value=_names[0])
         self.combo_user = ctk.CTkComboBox(
             self.frame_auth, 
-            values=["Sathvik", "Praneeth", "Jonathan", "Naveen"],
+            values=_names,
             variable=self.user_var
         )
         self.combo_user.pack(fill="x", padx=20, pady=(0, 15))

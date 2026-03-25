@@ -88,6 +88,12 @@ phone: "123-456-7890"
 # ... other profile information
 ```
 
+**OTP login (who receives the code):** copy `data/authorized_users.template.yaml` to `data/authorized_users.yaml` and set each display name → email. This file is not committed to git.
+
+**SMTP (to send real OTP emails):** set `JOBSPRO_SMTP_EMAIL` and `JOBSPRO_SMTP_APP_PASSWORD` (Gmail app password). If unset, the app runs OTP in simulation mode and prints the code to the log.
+
+See `docs/PROJECT_STRUCTURE.md` for the full repository layout.
+
 ## 🛠️ Building from Source
 
 ### Prerequisites
