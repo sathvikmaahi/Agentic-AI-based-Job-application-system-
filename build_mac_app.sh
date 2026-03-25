@@ -34,6 +34,8 @@ python3 assets/generate_icon.py
 PYI_DATA=(--add-data "assets/icon.png:assets")
 for f in data/*.yaml; do
     if [[ -f "$f" ]]; then
+        # Never bundle local OTP recipient list into the .app
+        [[ "$(basename "$f")" == "authorized_users.yaml" ]] && continue
         PYI_DATA+=(--add-data "$f:data")
     fi
 done
@@ -69,7 +71,11 @@ if [ -d "dist/ApplyAI.app" ]; then
     echo "Your app is ready: dist/ApplyAI.app"
 
     mkdir -p "dist/ApplyAI.app/Contents/Resources/data"
-    cp data/*.yaml "dist/ApplyAI.app/Contents/Resources/data/" 2>/dev/null || true
+    for f in data/*.yaml; do
+        [[ -f "$f" ]] || continue
+        [[ "$(basename "$f")" == "authorized_users.yaml" ]] && continue
+        cp "$f" "dist/ApplyAI.app/Contents/Resources/data/"
+    done
 
     rm -rf "${HOME}/Desktop/ApplyAI.app" "${HOME}/Desktop/JobsPro.app"
     cp -R "dist/ApplyAI.app" "${HOME}/Desktop/"
