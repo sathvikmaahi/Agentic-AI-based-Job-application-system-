@@ -1,0 +1,7 @@
+# Copy to smtp_config.yaml (gitignored). Gmail: use an App Password, not your login password.
+# https://myaccount.google.com/apppasswords
+smtp:
+  email: "your-sender@gmail.com"
+  app_password: "xxxx xxxx xxxx xxxx"
+  host: smtp.gmail.com
+  port: 465

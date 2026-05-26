@@ -7,6 +7,7 @@ data/user_profile.yaml
 data/resumes_config.yaml
 data/schedule_config.yaml
 data/authorized_users.yaml
+data/smtp_config.yaml
 
 # Keep template files
 !data/*.template.yaml

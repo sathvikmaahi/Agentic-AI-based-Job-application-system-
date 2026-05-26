@@ -78,7 +78,7 @@ class JobsProSimple(ctk.CTk):
         
         # User Selection
         ctk.CTkLabel(self.frame_auth, text="Select User").pack(anchor="w", padx=20)
-        _names = list(auth_manager.AUTHORIZED_USERS.keys())
+        _names = list(auth_manager.get_authorized_users().keys())
         if not _names:
             _names = ["UserOne"]
         self.user_var = ctk.StringVar(value=_names[0])
@@ -169,7 +169,7 @@ class JobsProSimple(ctk.CTk):
         success, msg = self.auth.send_otp_email(user)
         
         if success:
-            self.show_info(f"OTP Sent to {self.auth.get_email_for_user(user)}")
+            self.show_info(msg)
             self.btn_send_otp.configure(text="Resend Code", state="normal")
             self.frame_otp.pack(fill="x", padx=20, pady=10)
         else:

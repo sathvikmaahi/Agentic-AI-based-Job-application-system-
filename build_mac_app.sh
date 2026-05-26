@@ -35,7 +35,8 @@ PYI_DATA=(--add-data "assets/icon.png:assets")
 for f in data/*.yaml; do
     if [[ -f "$f" ]]; then
         # Never bundle local OTP recipient list into the .app
-        [[ "$(basename "$f")" == "authorized_users.yaml" ]] && continue
+        base="$(basename "$f")"
+        [[ "$base" == "authorized_users.yaml" || "$base" == "smtp_config.yaml" ]] && continue
         PYI_DATA+=(--add-data "$f:data")
     fi
 done
@@ -73,8 +74,16 @@ if [ -d "dist/ApplyAI.app" ]; then
     mkdir -p "dist/ApplyAI.app/Contents/Resources/data"
     for f in data/*.yaml; do
         [[ -f "$f" ]] || continue
-        [[ "$(basename "$f")" == "authorized_users.yaml" ]] && continue
+        base="$(basename "$f")"
+        [[ "$base" == "authorized_users.yaml" || "$base" == "smtp_config.yaml" ]] && continue
         cp "$f" "dist/ApplyAI.app/Contents/Resources/data/"
+    done
+    # Local secrets (gitignored) — copy into Desktop .app only, never into git
+    for secret in authorized_users.yaml smtp_config.yaml; do
+        if [[ -f "data/$secret" ]]; then
+            cp "data/$secret" "dist/ApplyAI.app/Contents/Resources/data/"
+            echo "📋 Included local data/$secret in the app bundle."
+        fi
     done
 
     rm -rf "${HOME}/Desktop/ApplyAI.app" "${HOME}/Desktop/JobsPro.app"

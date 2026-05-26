@@ -141,7 +141,7 @@ class ApplyAI(ctk.CTk):
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", padx=25, pady=(20, 8))
         
-        _names = list(auth_manager.AUTHORIZED_USERS.keys())
+        _names = list(auth_manager.get_authorized_users().keys())
         if not _names:
             _names = ["UserOne"]
         self.user_var = ctk.StringVar(value=_names[0])
@@ -295,7 +295,7 @@ class ApplyAI(ctk.CTk):
         success, msg = self.auth.send_otp_email(user)
         
         if success:
-            self.show_success(f"OTP sent to {self.auth.get_email_for_user(user)}")
+            self.show_success(msg)
             self.btn_send_otp.configure(text="Resend Code", state="normal")
             self.otp_frame.pack(fill="x", padx=25, pady=10)
         else:
