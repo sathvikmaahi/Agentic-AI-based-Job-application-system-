@@ -136,7 +136,7 @@ class ApplyAI(ctk.CTk):
         # User Selection Section
         ctk.CTkLabel(
             card, 
-            text="👤 Select User", 
+            text="Select User", 
             font=("SF Pro Text", 12, "bold"),
             text_color=COLORS["text_muted"]
         ).pack(anchor="w", padx=25, pady=(20, 8))
